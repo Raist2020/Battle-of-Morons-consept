@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Pause</title>
+</head>
+<body>
+    <button onclick="testPause()">Test Pause</button>
+    <div id="log"></div>
+
+<script>
+function addLog(text) {
+    const log = document.getElementById('log');
+    const p = document.createElement('div');
+    p.textContent = text;
+    log.appendChild(p);
+    console.log(text);
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function testPause() {
+    addLog("=== TEST START ===");
+    
+    addLog("1. First message");
+    await sleep(1000);
+    
+    addLog("2. Second message after 1 second");
+    await sleep(2000);
+    
+    addLog("3. Third message after 2 seconds");
+    await sleep(3000);
+    
+    addLog("4. Fourth message after 3 seconds");
+    addLog("=== TEST END ===");
+}
+</script>
+</body>
+</html>

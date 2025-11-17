@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Map Editor</title>
+<style>
+  body { margin: 0; padding: 0; }
+  #map-container {
+    position: relative;
+    width: 100%;
+    max-width: 1920px;
+    aspect-ratio: 1920/1009;
+    margin: auto;
+    background: url('map_bg.png') no-repeat center center;
+    background-size: cover;
+  }
+  .cell {
+    position: absolute;
+    border: 2px solid rgba(255,0,0,0.5);
+    background-color: rgba(255,0,0,0.2);
+    cursor: move;
+  }
+  #save-btn { margin: 10px; padding: 10px 20px; }
+</style>
+</head>
+<body>
+
+<button id="save-btn">Save JSON</button>
+<div id="map-container"></div>
+
+<script>
+let cells = [];
+const container = document.getElementById('map-container');
+
+// Загрузка старого JSON, если есть
+fetch('cells.json')
+  .then(r => r.json())
+  .then(data => {
+    cells = data;
+    renderCells();
+  })
+  .catch(()=>console.log('No existing JSON, starting fresh'));
+
+function renderCells() {
+  container.innerHTML = '';
+  cells.forEach(cell => {
+    const div = document.createElement('div');
+    div.className = 'cell';
+    div.style.top = cell.y + '%';
+    div.style.left = cell.x + '%';
+    div.style.width = cell.width + '%';
+    div.style.height = cell.height + '%';
+    div.draggable = true;
+
+    // Перетаскивание
+    div.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', cell.id);
+    });
+    div.addEventListener('dblclick', e => {
+      if (confirm('Delete this cell?')) {
+        cells = cells.filter(c => c.id !== cell.id);
+        renderCells();
+      }
+    });
+
+    container.appendChild(div);
+  });
+}
+
+// Клик по карте — новая клетка
+container.addEventListener('click', e => {
+  if(e.target !== container) return; // чтобы не создавать на другой клетке
+  const rect = container.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width) * 100;
+  const y = ((e.clientY - rect.top) / rect.height) * 100;
+  const id = cells.length ? Math.max(...cells.map(c=>c.id)) +1 : 1;
+  cells.push({id, x, y, width: 2.5, height:2.5}); // размер 5% карты
+  renderCells();
+});
+
+// Drag and drop внутри контейнера
+container.addEventListener('dragover', e => e.preventDefault());
+container.addEventListener('drop', e => {
+  e.preventDefault();
+  const id = parseInt(e.dataTransfer.getData('text/plain'));
+  const cell = cells.find(c=>c.id===id);
+  const rect = container.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width) * 100;
+  const y = ((e.clientY - rect.top) / rect.height) * 100;
+  cell.x = x; cell.y = y;
+  renderCells();
+});
+
+// Сохранение JSON
+document.getElementById('save-btn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(cells, null, 2)], {type: 'application/json'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'cells.json';
+  link.click();
+});
+</script>
+
+</body>
+</html>

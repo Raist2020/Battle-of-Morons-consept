@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Battle of Morones Map</title>
+<style>
+  body { margin:0; padding:0; background:#333; font-family: "Courier New", monospace; color: #fff; }
+  #map-container { position:relative; width:1920px; height:1006px; margin:auto; background:url('map_bg.png') no-repeat top left; background-size:100% 100%; overflow:hidden; }
+  .cell { 
+    position:absolute; 
+    border:2px solid rgba(0,80,0,0.8); 
+    background-color: rgba(0,120,0,0.5); 
+    cursor:pointer; 
+    aspect-ratio:1/1; 
+  }
+  #hero-marker {
+    position:absolute;
+    width:15px;
+    height:15px;
+    background: orange;
+    border-radius:50%;
+    pointer-events:none;
+    transform: translate(-50%, -50%);
+  }
+  #nft-window { position:absolute; top:20px; left:20px; width:800px; height:700px; background: #222; border:2px solid #fff; padding:10px; display:flex; flex-direction:row; }
+  #nft-left { flex:1; display:flex; flex-direction:column; align-items:center; height:100%; }
+  #nft-left img { max-width:100%; max-height:75%; width:auto; height:auto; }
+  #stats { margin-top:10px; text-align:left; width:100%; }
+  #nft-right { flex:1; margin-left:10px; display:flex; flex-direction:column; height:100%; }
+  #battle-log { flex:1; background:#111; padding:5px; overflow-y:auto; font-size:14px; border:1px solid #555; display:flex; flex-direction:column-reverse; }
+  #action-buttons { margin-top:5px; display:flex; justify-content:space-around; }
+  button { padding:5px 10px; font-size:14px; cursor:pointer; }
+  #mint-btn { position:absolute; top:20px; right:20px; padding:10px 20px; font-size:16px; cursor:pointer; background:#4caf50; color:#fff; border:none; border-radius:5px; }
+  #game-time { position:absolute; top:5px; left:50%; transform:translateX(-50%); font-family: "Courier New", monospace; color:#ffa; font-weight:bold; }
+</style>
+</head>
+<body>
+
+<div id="map-container">
+  <div id="hero-marker"></div>
+</div>
+<div id="game-time"></div>
+<button id="mint-btn">Mint NFT</button>
+
+<div id="nft-window" style="display:none;">
+  <div id="nft-left">
+    <img id="nft-img" src="" alt="NFT">
+    <div id="stats">
+      <div id="class-name"></div>
+      <div id="level">Level 1</div>
+      <div id="hp"></div>
+      <div id="atk"></div>
+      <div id="def"></div>
+      <div id="spd"></div>
+      <div id="status"></div>
+    </div>
+  </div>
+  <div id="nft-right">
+    <div id="battle-log"></div>
+    <div id="action-buttons">
+      <button id="move-btn" disabled>Move</button>
+      <button id="party-btn">Party</button>
+      <button id="leave-btn">Leave Party</button>
+      <button id="rest-btn">Rest</button>
+      <button id="heal-btn">Heal</button>
+      <button id="explore-btn">Explore</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- Setup map cells ---
+let cellsData = [];
+fetch('cells.json')
+  .then(res => res.json())
+  .then(cells => {
+    cellsData = cells;
+    const container = document.getElementById('map-container');
+    cells.forEach(cell => {
+      const div = document.createElement('div');
+      div.className='cell';
+      div.style.left = cell.x+'%';
+      div.style.top = cell.y+'%';
+      div.style.width = cell.width+'%';
+      div.style.height = cell.height+'%';
+      div.onclick = () => selectCell(cell);
+      container.appendChild(div);
+    });
+  });
+
+// --- Variables ---
+let player = null;
+let isProcessing = false;
+let heroMarker = document.getElementById('hero-marker');
+
+const terrains = [
+  "Sunny, birds are chirping. In the distance, vast meadows stretch endlessly, with riders visible on the horizon. A faint river sparkles, reflecting the warm sunlight.",
+  "A gentle breeze rustles suspiciously. Far away, the hills roll like waves, scattered with wandering travelers. Wildflowers release a sweet aroma, carried on the wind.",
+  "The grass seems alive with secrets. Beyond the fields, ancient trees stand like guardians, their leaves whispering old tales. Morning mist lingers softly across the valley.",
+  "Clouds roll slowly across the blue sky. In the far distance, a caravan moves steadily along a winding path. Golden rays illuminate the gentle undulations of the land.",
+  "The flowers hum a curious tune. Past the meadows, distant mountains rise majestically, capped with snow. A lone hawk circles above, scouting the lands.",
+  "Rocks look like they are plotting. Across the plains, scattered camps glow faintly as night approaches. The shadows of distant peaks stretch over the land.",
+  "A nearby tree shakes as if laughing. On the horizon, a river snakes gracefully, dotted with small boats. Soft hills and wild grass create a serene landscape.",
+  "The soil smells like adventure. Beyond the forest edge, open fields teem with life. Riders pass occasionally, their banners flapping in the breeze.",
+  "Shadows dance oddly on the ground. In the distance, windmills turn lazily across the open lands. Birds soar and dive, tracing invisible patterns in the sky.",
+  "A rabbit stares suspiciously at you. Far away, the glimmer of a city can be seen. Rolling hills and flowering meadows spread before it."
+];
+
+const battleIntros = [
+  "Hero sees movement in the bushes...",
+  "From the shadows emerges a timid leafhopper...",
+  "Something rustles in the grass, a curious snail peeks out...",
+  "A small mossy creature stirs, seemingly indecisive...",
+  "Tiny sand karakul scuttles toward the hero, unsure what to do..."
+];
+
+const attackSuccessPhrases = [
+  "Your strike is hilariously strong, mob looks puzzled.",
+  "Hero smacks the mob, it questions its life choices.",
+  "A mighty blow! Mob starts reconsidering its career.",
+  "The mob is stunned, maybe it should become a baker.",
+  "Hero hits, mob thinks about taking up knitting."
+];
+
+const attackFailPhrases = [
+  "Hero misses, mob chuckles awkwardly.",
+  "Mob dodges clumsily, looks embarrassed.",
+  "The strike fails, but hero laughs it off.",
+  "Mob parries easily, hero wonders about breakfast.",
+  "Attack goes wide, mob sighs dramatically."
+];
+
+const mobs = [
+  {name:"Rusty Leaf", hp:5, atk:2, def:1, spd:2},
+  {name:"Passive-Aggressive Snail", hp:6, atk:1, def:2, spd:1},
+  {name:"Bitey Mosquito", hp:4, atk:3, def:0, spd:3},
+  {name:"Suspicious Sand Karakul", hp:7, atk:2, def:2, spd:1},
+  {name:"Sad Moss Piece", hp:3, atk:1, def:1, spd:2}
+];
+
+// --- Fantasy calendar ---
+const YMonths = ["Frostmoon","Thawrise","Bloomtide","Sunpeak","Heatwane","Harvestfall","Leafdrop","Duskveil","Nightbloom","Starfall","Windfade","Frostveil"];
+function updateGameTime(){
+  const d = new Date();
+  const utc2 = new Date(d.getTime() + 2*60*60*1000);
+  const day = utc2.getUTCDate();
+  const month = YMonths[utc2.getUTCMonth()];
+  const hours = utc2.getUTCHours().toString().padStart(2,'0');
+  const mins = utc2.getUTCMinutes().toString().padStart(2,'0');
+  document.getElementById('game-time').innerText = `${month} ${day}, ${hours}:${mins} Yaugurtan Khaganate`;
+}
+setInterval(updateGameTime,1000);
+updateGameTime();
+
+// --- Simple sleep ---
+function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
+
+// --- Type message ---
+async function typeMessage(text) {
+    const log = document.getElementById('battle-log');
+    const p = document.createElement('div');
+    log.prepend(p); // новые сообщения сверху
+    for (let char of text) {
+        p.textContent += char;
+        await sleep(60); // скорость печати
+    }
+}
+
+// --- Add empty line ---
+async function addEmptyLine() {
+  const log = document.getElementById('battle-log');
+  const p = document.createElement('div');
+  p.textContent = "\u00A0";
+  log.prepend(p);
+  await sleep(100);
+}
+
+// --- Mint ---
+document.getElementById('mint-btn').onclick = () => {
+  if (isProcessing) return;
+  const classes = ["Tank","Assassin"];
+  const className = classes[Math.floor(Math.random()*classes.length)];
+  const id = Math.floor(Math.random()*10000)+1;
+  const nftImg = className==="Tank"?"tank.png":"assassin.png";
+  player = { className,id,img:nftImg,level:1,hp:100,atk:10,def:5,spd:5,status:"Healthy, Awake",cell:null };
+  document.getElementById('nft-img').src = player.img;
+  document.getElementById('class-name').innerText = `${className} #${id}`;
+  document.getElementById('hp').innerText = `HP: ${player.hp}`;
+  document.getElementById('atk').innerText = `ATK: ${player.atk}`;
+  document.getElementById('def').innerText = `DEF: ${player.def}`;
+  document.getElementById('spd').innerText = `SPD: ${player.spd}`;
+  document.getElementById('status').innerText = player.status;
+  document.getElementById('nft-window').style.display='flex';
+  document.getElementById('move-btn').disabled = false;
+};
+
+// --- Move hero marker ---
+function moveHeroMarker(cell){
+  const marker = heroMarker;
+  const container = document.getElementById('map-container');
+  const left = container.offsetWidth*cell.x/100 + container.offsetWidth*cell.width/200;
+  const top = container.offsetHeight*cell.y/100 + container.offsetHeight*cell.height/200;
+  marker.style.left = `${left}px`;
+  marker.style.top = `${top}px`;
+}
+
+// --- Select Cell ---
+async function selectCell(cell){
+  if(!player) { alert("Mint first!"); return; }
+  if(isProcessing) return;
+  isProcessing = true;
+  player.cell = cell;
+  moveHeroMarker(cell);
+  document.getElementById('move-btn').disabled = true;
+  
+  try {
+    const terrainDesc = terrains[Math.floor(Math.random()*terrains.length)];
+    await typeMessage(`Your hero lands on cell #${cell.id}.`);
+    await typeMessage(`\n${terrainDesc}`);
+    await addEmptyLine();
+    
+    await sleep(3000);
+    
+    await typeMessage("\n" + battleIntros[Math.floor(Math.random()*battleIntros.length)]);
+    await addEmptyLine();
+    await typeMessage("Battle Begins!\n");
+    await addEmptyLine();
+    
+    await executeBattle();
+    
+    await sleep(3000);
+    
+    await addEmptyLine();
+    await typeMessage("\nVictory! +1 XP, HP untouched.\n");
+  } catch(e){ console.error(e); }
+  finally { document.getElementById('move-btn').disabled = false; isProcessing=false; }
+}
+
+// --- Execute Battle ---
+async function executeBattle(){
+  const fightMobs = [];
+  const mobCount = Math.floor(Math.random()*2)+1;
+  for(let i=0;i<mobCount;i++){ fightMobs.push({...mobs[Math.floor(Math.random()*mobs.length)]}); }
+  await typeMessage(`\nEncountered ${fightMobs.length} enemy(ies)!`);
+  let turn=0;
+  while(fightMobs.length>0){
+    const mob=fightMobs[0];
+    if(turn%2===0){
+      const hit = roll(player.atk,mob.def);
+      const phrase = hit ? attackSuccessPhrases[Math.floor(Math.random()*attackSuccessPhrases.length)]
+                         : attackFailPhrases[Math.floor(Math.random()*attackFailPhrases.length)];
+      await typeMessage(`\nHero attacks ${mob.name}: ${phrase}`);
+      if(hit){ mob.hp-=10; await typeMessage(` ${mob.name} takes 10 damage!`); }
+    } else {
+      const hit = roll(mob.atk,player.def);
+      const phrase = hit ? `${mob.name} hits! You feel a funny sting.` : `${mob.name} misses, how embarrassing!`;
+      await typeMessage(`\n${phrase}`);
+      if(hit) player.hp-=5;
+    }
+    if(mob.hp<=0){ await typeMessage(`\n${mob.name} defeated!`); fightMobs.shift(); }
+    turn++; await sleep(1500);
+  }
+}
+
+// --- Dice ---
+function roll(att,def){ return Math.random()<att/(att+def); }
+</script>
+
+</body>
+</html>
